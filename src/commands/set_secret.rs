@@ -1,5 +1,9 @@
+use crate::{
+    audit,
+    config::Config,
+    github::{get_repository_info, GitHubClient},
+};
 use anyhow::Result;
-use crate::{audit, config::Config, github::{get_repository_info, GitHubClient}};
 
 pub async fn handle(environment: String, secret: String, value: String) -> Result<()> {
     let config = Config::load()?;
@@ -7,7 +11,9 @@ pub async fn handle(environment: String, secret: String, value: String) -> Resul
     let (owner, repo) = get_repository_info()?;
 
     let client = GitHubClient::new(&token)?;
-    client.set_secret(&owner, &repo, &environment, &secret, &value).await?;
+    client
+        .set_secret(&owner, &repo, &environment, &secret, &value)
+        .await?;
 
     // Log audit event
     audit::log_event(
@@ -19,7 +25,10 @@ pub async fn handle(environment: String, secret: String, value: String) -> Resul
     )
     .await?;
 
-    println!("Secret '{}' set successfully in environment '{}'", secret, environment);
+    println!(
+        "Secret '{}' set successfully in environment '{}'",
+        secret, environment
+    );
 
     Ok(())
 }

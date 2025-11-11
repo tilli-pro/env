@@ -12,35 +12,34 @@ pub struct Config {
 impl Config {
     pub fn load() -> Result<Self> {
         let config_path = Self::config_path()?;
-        
+
         if !config_path.exists() {
             anyhow::bail!("Configuration not found. Run 'with-env init' first.");
         }
 
-        let contents = std::fs::read_to_string(&config_path)
-            .context("Failed to read configuration file")?;
-        
+        let contents =
+            std::fs::read_to_string(&config_path).context("Failed to read configuration file")?;
+
         toml::from_str(&contents).context("Failed to parse configuration file")
     }
 
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path()?;
-        
+
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent).context("Failed to create config directory")?;
         }
 
         let contents = toml::to_string_pretty(self).context("Failed to serialize configuration")?;
-        
+
         std::fs::write(&config_path, contents).context("Failed to write configuration file")?;
-        
+
         Ok(())
     }
 
     pub fn config_path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir()
-            .context("Failed to determine config directory")?;
-        
+        let config_dir = dirs::config_dir().context("Failed to determine config directory")?;
+
         Ok(config_dir.join("with-env").join("config.toml"))
     }
 

@@ -35,14 +35,14 @@ impl AuditEvent {
 
     pub async fn send(&self, audit_url: &str) -> Result<()> {
         let client = reqwest::Client::new();
-        
+
         client
             .post(audit_url)
             .json(self)
             .send()
             .await
             .context("Failed to send audit event")?;
-        
+
         Ok(())
     }
 }
@@ -55,10 +55,10 @@ pub async fn log_event(
     audit_url: Option<&str>,
 ) -> Result<()> {
     let event = AuditEvent::new(action, repository, environment, secret_name);
-    
+
     if let Some(url) = audit_url {
         event.send(url).await?;
     }
-    
+
     Ok(())
 }

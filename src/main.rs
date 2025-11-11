@@ -48,7 +48,7 @@ enum Commands {
     GetSecret {
         /// Environment name
         environment: String,
-        
+
         /// Secret name
         secret: String,
     },
@@ -57,10 +57,10 @@ enum Commands {
     SetSecret {
         /// Environment name
         environment: String,
-        
+
         /// Secret name
         secret: String,
-        
+
         /// Secret value
         value: String,
     },
@@ -69,7 +69,7 @@ enum Commands {
     DeleteSecret {
         /// Environment name
         environment: String,
-        
+
         /// Secret name
         secret: String,
     },
@@ -90,27 +90,32 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::Init { org, audit_url, token }) => {
-            commands::init::handle(org, audit_url, token).await
-        }
-        Some(Commands::ListEnvs) => {
-            commands::list_envs::handle().await
-        }
+        Some(Commands::Init {
+            org,
+            audit_url,
+            token,
+        }) => commands::init::handle(org, audit_url, token).await,
+        Some(Commands::ListEnvs) => commands::list_envs::handle().await,
         Some(Commands::ListSecrets { environment }) => {
             commands::list_secrets::handle(environment).await
         }
-        Some(Commands::GetSecret { environment, secret }) => {
-            commands::get_secret::handle(environment, secret).await
-        }
-        Some(Commands::SetSecret { environment, secret, value }) => {
-            commands::set_secret::handle(environment, secret, value).await
-        }
-        Some(Commands::DeleteSecret { environment, secret }) => {
-            commands::delete_secret::handle(environment, secret).await
-        }
-        Some(Commands::Run { environment, command }) => {
-            commands::run::handle(environment, command).await
-        }
+        Some(Commands::GetSecret {
+            environment,
+            secret,
+        }) => commands::get_secret::handle(environment, secret).await,
+        Some(Commands::SetSecret {
+            environment,
+            secret,
+            value,
+        }) => commands::set_secret::handle(environment, secret, value).await,
+        Some(Commands::DeleteSecret {
+            environment,
+            secret,
+        }) => commands::delete_secret::handle(environment, secret).await,
+        Some(Commands::Run {
+            environment,
+            command,
+        }) => commands::run::handle(environment, command).await,
         None => {
             // If no subcommand is provided, treat it as a run command with the default environment
             if cli.args.is_empty() {

@@ -1,5 +1,9 @@
+use crate::{
+    audit,
+    config::Config,
+    github::{get_repository_info, GitHubClient},
+};
 use anyhow::Result;
-use crate::{audit, config::Config, github::{get_repository_info, GitHubClient}};
 
 pub async fn handle(environment: String, secret: String) -> Result<()> {
     let config = Config::load()?;
@@ -7,7 +11,9 @@ pub async fn handle(environment: String, secret: String) -> Result<()> {
     let (owner, repo) = get_repository_info()?;
 
     let client = GitHubClient::new(&token)?;
-    let secret_info = client.get_secret(&owner, &repo, &environment, &secret).await?;
+    let secret_info = client
+        .get_secret(&owner, &repo, &environment, &secret)
+        .await?;
 
     // Log audit event
     audit::log_event(

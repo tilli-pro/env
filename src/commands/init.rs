@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::config::Config;
+use anyhow::Result;
 
 pub async fn handle(org: String, audit_url: Option<String>, token: Option<String>) -> Result<()> {
     let config = Config {
@@ -12,7 +12,7 @@ pub async fn handle(org: String, audit_url: Option<String>, token: Option<String
 
     println!("Configuration saved successfully!");
     println!("Organization: {}", org);
-    
+
     if let Some(url) = &config.audit_url {
         println!("Audit URL: {}", url);
     }

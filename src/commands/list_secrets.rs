@@ -1,5 +1,9 @@
+use crate::{
+    audit,
+    config::Config,
+    github::{get_repository_info, GitHubClient},
+};
 use anyhow::Result;
-use crate::{audit, config::Config, github::{get_repository_info, GitHubClient}};
 
 pub async fn handle(environment: String) -> Result<()> {
     let config = Config::load()?;
