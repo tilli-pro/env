@@ -8,6 +8,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "with-env")]
+#[command(version)]
 #[command(about = "Manage GitHub secrets and environments", long_about = None)]
 struct Cli {
     #[command(subcommand)]
