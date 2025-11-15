@@ -1,13 +1,13 @@
 use crate::{
     config::Config,
-    github::{get_repository_info, GitHubClient},
+    github::{resolve_repository_info, GitHubClient},
 };
 use anyhow::Result;
 
-pub async fn handle() -> Result<()> {
+pub async fn handle(repo_flag: Option<String>) -> Result<()> {
     let config = Config::load()?;
     let token = config.get_github_token()?;
-    let (owner, repo) = get_repository_info()?;
+    let (owner, repo) = resolve_repository_info(repo_flag)?;
 
     let client = GitHubClient::new(&token)?;
     let environments = client.list_environments(&owner, &repo).await?;

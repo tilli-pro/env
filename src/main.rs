@@ -2,6 +2,8 @@ mod audit;
 mod commands;
 mod config;
 mod github;
+mod security;
+mod validation;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -11,6 +13,10 @@ use clap::{Parser, Subcommand};
 #[command(version)]
 #[command(about = "Manage GitHub secrets and environments", long_about = None)]
 struct Cli {
+    /// Specify repository (format: owner/repo or just repo to use org from config)
+    #[arg(short, long, global = true)]
+    repo: Option<String>,
+
     #[command(subcommand)]
     command: Option<Commands>,
 
@@ -36,7 +42,7 @@ enum Commands {
         token: Option<String>,
     },
 
-    /// List environments for the current repository
+    /// List environments for the repository
     ListEnvs,
 
     /// List secrets for an environment
@@ -54,7 +60,7 @@ enum Commands {
         secret: String,
     },
 
-    /// Set a secret value
+    /// Set a secret value (reads from stdin for security)
     SetSecret {
         /// Environment name
         environment: String,
@@ -62,8 +68,9 @@ enum Commands {
         /// Secret name
         secret: String,
 
-        /// Secret value
-        value: String,
+        /// Read secret value from file
+        #[arg(long, value_name = "FILE")]
+        from_file: Option<String>,
     },
 
     /// Delete a secret
@@ -79,6 +86,10 @@ enum Commands {
     Run {
         /// Environment name
         environment: String,
+
+        /// Don't replace process (spawn as child instead of exec)
+        #[arg(long)]
+        no_exec: bool,
 
         /// Command and arguments to run
         #[arg(trailing_var_arg = true)]
@@ -96,27 +107,28 @@ async fn main() -> Result<()> {
             audit_url,
             token,
         }) => commands::init::handle(org, audit_url, token).await,
-        Some(Commands::ListEnvs) => commands::list_envs::handle().await,
+        Some(Commands::ListEnvs) => commands::list_envs::handle(cli.repo).await,
         Some(Commands::ListSecrets { environment }) => {
-            commands::list_secrets::handle(environment).await
+            commands::list_secrets::handle(environment, cli.repo).await
         }
         Some(Commands::GetSecret {
             environment,
             secret,
-        }) => commands::get_secret::handle(environment, secret).await,
+        }) => commands::get_secret::handle(environment, secret, cli.repo).await,
         Some(Commands::SetSecret {
             environment,
             secret,
-            value,
-        }) => commands::set_secret::handle(environment, secret, value).await,
+            from_file,
+        }) => commands::set_secret::handle(environment, secret, from_file, cli.repo).await,
         Some(Commands::DeleteSecret {
             environment,
             secret,
-        }) => commands::delete_secret::handle(environment, secret).await,
+        }) => commands::delete_secret::handle(environment, secret, cli.repo).await,
         Some(Commands::Run {
             environment,
             command,
-        }) => commands::run::handle(environment, command).await,
+            no_exec,
+        }) => commands::run::handle(environment, command, cli.repo, no_exec).await,
         None => {
             // If no subcommand is provided, treat it as a run command with the default environment
             if cli.args.is_empty() {
@@ -125,8 +137,8 @@ async fn main() -> Result<()> {
                 eprintln!("   or: with-env <subcommand>");
                 std::process::exit(1);
             }
-            // Use "default" as the environment name
-            commands::run::handle("default".to_string(), cli.args).await
+            // Use "default" as the environment name, with exec by default
+            commands::run::handle("default".to_string(), cli.args, cli.repo, false).await
         }
     }
 }
