@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use base64::prelude::*;
+use crypto_box::{aead::Aead, PublicKey, SalsaBox, SecretKey};
 use serde::{Deserialize, Serialize};
-use sodiumoxide::crypto::sealedbox;
 use urlencoding::encode as url_encode;
 
 #[derive(Debug, Deserialize)]
@@ -87,7 +87,9 @@ impl GitHubClient {
     ) -> Result<Vec<Secret>> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/environments/{}/secrets",
-            owner, repo, url_encode(environment)
+            owner,
+            repo,
+            url_encode(environment)
         );
 
         let response = self
@@ -116,7 +118,10 @@ impl GitHubClient {
     ) -> Result<Secret> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/environments/{}/secrets/{}",
-            owner, repo, url_encode(environment), secret_name
+            owner,
+            repo,
+            url_encode(environment),
+            secret_name
         );
 
         let response = self
@@ -144,7 +149,9 @@ impl GitHubClient {
         secret_value: &str,
     ) -> Result<()> {
         // Get the environment-specific public key (not the repository-level key)
-        let public_key = self.get_environment_public_key(owner, repo, environment).await?;
+        let public_key = self
+            .get_environment_public_key(owner, repo, environment)
+            .await?;
 
         // Encrypt the secret value
         let encrypted_value = self.encrypt_secret(&public_key.key, secret_value)?;
@@ -152,7 +159,10 @@ impl GitHubClient {
         // Set the secret
         let url = format!(
             "https://api.github.com/repos/{}/{}/environments/{}/secrets/{}",
-            owner, repo, url_encode(environment), secret_name
+            owner,
+            repo,
+            url_encode(environment),
+            secret_name
         );
 
         let payload = serde_json::json!({
@@ -176,7 +186,10 @@ impl GitHubClient {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             // Log full error for debugging but don't expose to user
-            eprintln!("DEBUG: GitHub API error response: {}", crate::security::redact_error_message(&body));
+            eprintln!(
+                "DEBUG: GitHub API error response: {}",
+                crate::security::redact_error_message(&body)
+            );
             anyhow::bail!("Failed to set secret: HTTP {}", status.as_u16());
         }
 
@@ -192,7 +205,10 @@ impl GitHubClient {
     ) -> Result<()> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/environments/{}/secrets/{}",
-            owner, repo, url_encode(environment), secret_name
+            owner,
+            repo,
+            url_encode(environment),
+            secret_name
         );
 
         let response = self
@@ -210,7 +226,10 @@ impl GitHubClient {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             // Log full error for debugging but don't expose to user
-            eprintln!("DEBUG: GitHub API error response: {}", crate::security::redact_error_message(&body));
+            eprintln!(
+                "DEBUG: GitHub API error response: {}",
+                crate::security::redact_error_message(&body)
+            );
             anyhow::bail!("Failed to delete secret: HTTP {}", status.as_u16());
         }
 
@@ -253,7 +272,9 @@ impl GitHubClient {
     ) -> Result<RepositoryPublicKey> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/environments/{}/secrets/public-key",
-            owner, repo, url_encode(environment)
+            owner,
+            repo,
+            url_encode(environment)
         );
 
         let response = self
@@ -274,18 +295,42 @@ impl GitHubClient {
     }
 
     fn encrypt_secret(&self, public_key: &str, secret_value: &str) -> Result<String> {
-        sodiumoxide::init().map_err(|_| anyhow::anyhow!("Failed to initialize sodiumoxide"))?;
+        use blake2::{Blake2b512, Digest};
 
         let public_key_bytes = BASE64_STANDARD
             .decode(public_key)
             .context("Failed to decode public key")?;
 
-        let public_key = sodiumoxide::crypto::box_::PublicKey::from_slice(&public_key_bytes)
-            .context("Invalid public key")?;
+        let recipient_pk = PublicKey::from(
+            <[u8; 32]>::try_from(public_key_bytes.as_slice())
+                .map_err(|_| anyhow::anyhow!("Invalid public key length"))?,
+        );
 
-        let encrypted = sealedbox::seal(secret_value.as_bytes(), &public_key);
+        // Implement sealed box encryption (libsodium compatible)
+        // 1. Generate ephemeral keypair
+        let mut rng = rand::thread_rng();
+        let ephemeral_sk = SecretKey::generate(&mut rng);
+        let ephemeral_pk = ephemeral_sk.public_key();
 
-        Ok(BASE64_STANDARD.encode(encrypted))
+        // 2. Compute nonce as BLAKE2b(ephemeral_pk || recipient_pk)[0..24]
+        let mut hasher = Blake2b512::new();
+        hasher.update(ephemeral_pk.as_bytes());
+        hasher.update(recipient_pk.as_bytes());
+        let hash = hasher.finalize();
+        let nonce = crypto_box::Nonce::from_slice(&hash[0..24]);
+
+        // 3. Encrypt using crypto_box
+        let salsa_box = SalsaBox::new(&recipient_pk, &ephemeral_sk);
+        let ciphertext = salsa_box
+            .encrypt(nonce, secret_value.as_bytes())
+            .map_err(|_| anyhow::anyhow!("Encryption failed"))?;
+
+        // 4. Return ephemeral_pk || ciphertext
+        let mut sealed = Vec::with_capacity(32 + ciphertext.len());
+        sealed.extend_from_slice(ephemeral_pk.as_bytes());
+        sealed.extend_from_slice(&ciphertext);
+
+        Ok(BASE64_STANDARD.encode(sealed))
     }
 }
 
@@ -332,7 +377,10 @@ fn parse_repo_spec(spec: &str) -> Result<(String, String)> {
     }
 
     if spec.contains(char::is_whitespace) {
-        anyhow::bail!("Repository specification cannot contain whitespace: {}", spec);
+        anyhow::bail!(
+            "Repository specification cannot contain whitespace: {}",
+            spec
+        );
     }
 
     // Check if it's in "owner/repo" format
@@ -341,7 +389,10 @@ fn parse_repo_spec(spec: &str) -> Result<(String, String)> {
         let repo = spec[slash_pos + 1..].trim();
 
         if owner.is_empty() || repo.is_empty() {
-            anyhow::bail!("Invalid repository format '{}'. Use 'owner/repo' or just 'repo'", spec);
+            anyhow::bail!(
+                "Invalid repository format '{}'. Use 'owner/repo' or just 'repo'",
+                spec
+            );
         }
 
         // Validate owner and repo names
@@ -353,8 +404,9 @@ fn parse_repo_spec(spec: &str) -> Result<(String, String)> {
         // Just repo name provided, need to get owner from config
         validate_github_name(spec, "repository")?;
 
-        let config = crate::config::Config::load()
-            .context("Failed to load config. Run 'with-env init' first or use 'owner/repo' format.")?;
+        let config = crate::config::Config::load().context(
+            "Failed to load config. Run 'with-env init' first or use 'owner/repo' format.",
+        )?;
 
         Ok((config.organization, spec.to_string()))
     }
@@ -472,7 +524,10 @@ mod tests {
         let url = "github.com/octocat/Hello-World";
         let result = parse_github_url(url);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid GitHub URL format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid GitHub URL format"));
     }
 
     #[test]
@@ -562,14 +617,20 @@ mod tests {
     fn test_validate_github_name_starts_with_dot() {
         let result = validate_github_name(".myrepo", "repository");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot start with"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with"));
     }
 
     #[test]
     fn test_validate_github_name_starts_with_hyphen() {
         let result = validate_github_name("-myrepo", "repository");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot start with"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with"));
     }
 
     #[test]
@@ -594,7 +655,10 @@ mod tests {
     fn test_validate_github_name_invalid_space() {
         let result = validate_github_name("my repo", "repository");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid character"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid character"));
     }
 
     #[test]
@@ -636,7 +700,10 @@ mod tests {
     fn test_parse_repo_spec_with_whitespace() {
         let result = parse_repo_spec("owner/repo name");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot contain whitespace"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot contain whitespace"));
     }
 
     #[test]
@@ -650,42 +717,60 @@ mod tests {
     fn test_parse_repo_spec_missing_owner() {
         let result = parse_repo_spec("/myrepo");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid repository format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid repository format"));
     }
 
     #[test]
     fn test_parse_repo_spec_missing_repo() {
         let result = parse_repo_spec("owner/");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid repository format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid repository format"));
     }
 
     #[test]
     fn test_parse_repo_spec_invalid_owner_chars() {
         let result = parse_repo_spec("owner@bad/repo");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid character"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid character"));
     }
 
     #[test]
     fn test_parse_repo_spec_invalid_repo_chars() {
         let result = parse_repo_spec("owner/repo@bad");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid character"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid character"));
     }
 
     #[test]
     fn test_parse_repo_spec_owner_starts_with_dot() {
         let result = parse_repo_spec(".owner/repo");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot start with"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with"));
     }
 
     #[test]
     fn test_parse_repo_spec_repo_starts_with_hyphen() {
         let result = parse_repo_spec("owner/-repo");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot start with"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot start with"));
     }
 
     // ========================================================================
@@ -711,7 +796,10 @@ mod tests {
     fn test_resolve_repository_info_with_invalid_chars() {
         let result = resolve_repository_info(Some("owner@bad/repo".to_string()));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid character"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid character"));
     }
 
     // Note: Testing with None (auto-detection from git) and short format
@@ -726,10 +814,11 @@ mod tests {
     fn test_encrypt_secret_with_valid_key() {
         let client = GitHubClient::new("fake-token").unwrap();
 
-        // Generate a valid libsodium public key for testing
-        sodiumoxide::init().unwrap();
-        let (pk, _sk) = sodiumoxide::crypto::box_::gen_keypair();
-        let public_key_base64 = BASE64_STANDARD.encode(pk.as_ref());
+        // Generate a valid Curve25519 public key for testing
+        let mut rng = rand::thread_rng();
+        let secret_key = crypto_box::SecretKey::generate(&mut rng);
+        let public_key = secret_key.public_key();
+        let public_key_base64 = BASE64_STANDARD.encode(public_key.as_bytes());
 
         let result = client.encrypt_secret(&public_key_base64, "my-secret-value");
         assert!(result.is_ok());
@@ -746,7 +835,10 @@ mod tests {
         let client = GitHubClient::new("fake-token").unwrap();
         let result = client.encrypt_secret("not-valid-base64!@#", "my-secret");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Failed to decode public key"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to decode public key"));
     }
 
     #[test]
@@ -756,6 +848,9 @@ mod tests {
         let short_key = BASE64_STANDARD.encode(b"tooshort");
         let result = client.encrypt_secret(&short_key, "my-secret");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid public key"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid public key"));
     }
 }

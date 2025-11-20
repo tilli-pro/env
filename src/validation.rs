@@ -45,8 +45,8 @@ pub fn validate_environment_name(env: &str) -> Result<()> {
 pub fn sanitize_for_filepath(env: &str) -> String {
     env.chars()
         .map(|c| match c {
-            '/' | '\\' => '_',  // Path separators
-            ':' => '-',         // Colon (problematic on Windows)
+            '/' | '\\' => '_',                        // Path separators
+            ':' => '-',                               // Colon (problematic on Windows)
             '<' | '>' | '|' | '"' | '?' | '*' => '_', // Invalid filename chars
             c => c,
         })
@@ -55,9 +55,8 @@ pub fn sanitize_for_filepath(env: &str) -> String {
 
 /// Validates secret name
 pub fn validate_secret_name(name: &str) -> Result<()> {
-    let regex = SECRET_NAME_REGEX.get_or_init(|| {
-        Regex::new(r"^[A-Z0-9_]+$").expect("Invalid regex pattern")
-    });
+    let regex = SECRET_NAME_REGEX
+        .get_or_init(|| Regex::new(r"^[A-Z0-9_]+$").expect("Invalid regex pattern"));
 
     if name.is_empty() {
         anyhow::bail!("Secret name cannot be empty");
@@ -587,7 +586,10 @@ mod tests {
     #[test]
     fn test_sanitize_filepath_colons() {
         assert_eq!(sanitize_for_filepath("env:dev"), "env-dev");
-        assert_eq!(sanitize_for_filepath("@org/api (env:prod)"), "@org_api (env-prod)");
+        assert_eq!(
+            sanitize_for_filepath("@org/api (env:prod)"),
+            "@org_api (env-prod)"
+        );
     }
 
     #[test]

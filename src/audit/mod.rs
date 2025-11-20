@@ -50,10 +50,7 @@ impl AuditEvent {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
 
-        let response = request
-            .send()
-            .await
-            .context("Failed to send audit event")?;
+        let response = request.send().await.context("Failed to send audit event")?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -76,7 +73,10 @@ pub async fn log_event(
 
     if let Some(url) = audit_url {
         // Never ignore audit failures - they indicate a security issue
-        event.send(url, audit_token).await.context("Failed to log audit event. This is a security concern.")?;
+        event
+            .send(url, audit_token)
+            .await
+            .context("Failed to log audit event. This is a security concern.")?;
     }
 
     Ok(())

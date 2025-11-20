@@ -48,7 +48,9 @@ pub fn check_file_permissions(path: &Path) -> Result<()> {
                 mode & 0o777
             );
             eprintln!("   Recommended: Run 'chmod 600 {}'", path.display());
-            eprintln!("   This file may contain sensitive data and should only be readable by you.");
+            eprintln!(
+                "   This file may contain sensitive data and should only be readable by you."
+            );
             eprintln!();
         }
     }

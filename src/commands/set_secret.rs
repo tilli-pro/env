@@ -29,8 +29,7 @@ pub async fn handle(
     } else {
         // Read from stdin (hidden input)
         println!("Enter secret value for '{}' (input hidden):", secret);
-        rpassword::read_password()
-            .context("Failed to read secret value")?
+        rpassword::read_password().context("Failed to read secret value")?
     };
 
     // Validate secret value

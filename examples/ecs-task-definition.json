@@ -1,0 +1,63 @@
+{
+  "family": "with-env-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/with-env-task-role",
+  "containerDefinitions": [
+    {
+      "name": "with-env",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/with-env:latest",
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/with-env",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "environment": [
+        {
+          "name": "ORGANIZATION",
+          "value": "your-github-org"
+        },
+        {
+          "name": "RUST_LOG",
+          "value": "info"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "GITHUB_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:YOUR_ACCOUNT_ID:secret:github-token-xxxxx"
+        }
+      ],
+      "command": [
+        "list-envs"
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "config",
+          "containerPath": "/home/appuser/.config/with-env",
+          "readOnly": false
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "config",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-xxxxxxxxx",
+        "rootDirectory": "/with-env-config",
+        "transitEncryption": "ENABLED",
+        "authorizationConfig": {
+          "iam": "ENABLED"
+        }
+      }
+    }
+  ]
+}

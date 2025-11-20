@@ -1,0 +1,76 @@
+# Docker Compose example for local development and testing
+version: '3.8'
+
+services:
+  # Main with-env service
+  with-env:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: with-env:latest
+    container_name: with-env
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - ORGANIZATION=${ORGANIZATION:-your-org}
+      - RUST_LOG=info
+    volumes:
+      # Mount config directory for persistence
+      - with-env-config:/home/appuser/.config/with-env
+      # Mount local env files
+      - ./envs:/home/appuser/.config/with-env/envs:ro
+    command: ["--help"]
+    restart: unless-stopped
+
+  # Example: Run with-env in admin mode for managing secrets
+  with-env-admin:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: with-env:latest
+    container_name: with-env-admin
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - ORGANIZATION=${ORGANIZATION:-your-org}
+    volumes:
+      - with-env-config:/home/appuser/.config/with-env
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        with-env init --org $${ORGANIZATION}
+        with-env list-envs
+        exec /bin/bash
+    stdin_open: true
+    tty: true
+    profiles: ["admin"]
+
+  # Example: Application that uses secrets from with-env
+  app:
+    image: node:18-alpine
+    container_name: app
+    depends_on:
+      - with-env
+    volumes:
+      - with-env-config:/config:ro
+    environment:
+      # These would be loaded from with-env env files
+      - NODE_ENV=production
+    command: ["sh", "-c", "echo 'App running with environment from with-env' && sleep infinity"]
+    profiles: ["app"]
+
+volumes:
+  with-env-config:
+    driver: local
+
+# Usage:
+# 1. Set environment variables:
+#    export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
+#    export ORGANIZATION=your-org
+#
+# 2. Run main service:
+#    docker-compose up with-env
+#
+# 3. Run admin shell:
+#    docker-compose --profile admin run with-env-admin
+#
+# 4. Run with application:
+#    docker-compose --profile app up

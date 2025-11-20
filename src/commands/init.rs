@@ -4,8 +4,7 @@ use anyhow::{Context, Result};
 pub async fn handle(org: String, audit_url: Option<String>, token: Option<String>) -> Result<()> {
     // Validate audit URL if provided
     if let Some(ref url) = audit_url {
-        crate::validation::validate_https_url(url)
-            .context("Invalid audit URL")?;
+        crate::validation::validate_https_url(url).context("Invalid audit URL")?;
     }
 
     // Prompt for audit token if audit URL is provided

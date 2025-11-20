@@ -72,7 +72,9 @@ impl Config {
         // Fall back to config file (deprecated, but supported for backwards compatibility)
         if let Some(token) = &self.github_token {
             eprintln!("⚠️  WARNING: Storing tokens in config file is deprecated and insecure.");
-            eprintln!("   Please migrate to environment variable: export GITHUB_TOKEN=$(gh auth token)");
+            eprintln!(
+                "   Please migrate to environment variable: export GITHUB_TOKEN=$(gh auth token)"
+            );
             eprintln!();
             return Ok(token.clone());
         }
@@ -103,9 +105,7 @@ impl Config {
 
     fn get_token_from_gh_cli() -> Result<String> {
         // Check if gh CLI is installed
-        let check = std::process::Command::new("gh")
-            .arg("--version")
-            .output();
+        let check = std::process::Command::new("gh").arg("--version").output();
 
         if check.is_err() {
             anyhow::bail!("GitHub CLI not installed");
@@ -137,7 +137,9 @@ impl Config {
 
     pub fn store_token_in_keyring(token: &str) -> Result<()> {
         let entry = keyring::Entry::new("with-env", "github_token")?;
-        entry.set_password(token).context("Failed to store token in keyring")?;
+        entry
+            .set_password(token)
+            .context("Failed to store token in keyring")?;
         Ok(())
     }
 
